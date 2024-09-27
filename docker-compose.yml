@@ -15,6 +15,8 @@ services:
     ports:
       - 9092:9092
       - 9093:9093
+      - 19092:19092
+      - 29093:29093
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
@@ -29,13 +31,35 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: 'broker:29092'
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
 
-  app:
-    image: python:3.9-slim
-    container_name: main_app
+  generator:
+    image: python:bullseye
+    container_name: generator_app
     build: .
     depends_on:
       - broker
       - zookeeper
-    command: /bin/bash -c "python3 main.py worker -l info"
+    command: /bin/bash -c "python3 data_generator.py"
+
+  stream:
+    image: python:bullseye
+    container_name: stream_app
+    build: .
+    depends_on:
+      - broker
+      - zookeeper
+    command: /bin/bash -c "python3 stream.py worker -l info"
+
+#  control-center:
+#    image: confluentinc/cp-enterprise-control-center
+#    hostname: control-center
+#    container_name: control-center
+#    depends_on:
+#      - broker
+#    ports:
+#      - "9021:9021"
+#    environment:
+#      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'broker:9092'
+#      PORT: 9021

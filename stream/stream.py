@@ -8,17 +8,21 @@ class Purchase(faust.Record):
     quantity: int
     timestamp: float
 
+
 class Product(faust.Record):
     id: str
     name: str
     price: float
 
+
 class Alert(faust.Record):
     total_sales: float
+    product: str
     timestamp: float
 
+
 app = faust.App(
-    "product-alert-app",
+    "stream-app",
     broker="kafka://localhost:9092",
     topic_partitions=1,
 )
@@ -32,6 +36,7 @@ sales_table = app.Table("sales_table", default=float, partitions=1).tumbling(
     timedelta(minutes=1), expires=timedelta(minutes=1)
 )
 
+
 @app.agent(purchases_topic)
 async def process_purchase(purchases):
     async for purchase in purchases:
@@ -39,11 +44,11 @@ async def process_purchase(purchases):
         if product:
             sale_amount = purchase.quantity * product.price
             current_total = sales_table["total"].now() or 0
-            sales_table["total"] = current_total + sale_amount
+            sales_table[product.id] = current_total + sale_amount
 
-            if sales_table["total"].now() > 3000:
-                total_sales = sales_table["total"].now()
-                alert = Alert(total_sales=total_sales, timestamp=purchase.timestamp)
+            if sales_table[product.id].now() > 3000:
+                total_sales = sales_table[product.id].now()
+                alert = Alert(product=product.name, total_sales=total_sales, timestamp=purchase.timestamp)
                 await alerts_topic.send(value=alert)
 
 
@@ -52,9 +57,8 @@ async def process_product(products):
     async for product in products:
         products_table[product.id] = product
 
+
 @app.agent(alerts_topic)
 async def process_alert(alerts):
     async for alert in alerts:
-        print(f"Received alert: Total sales {alert.total_sales} at {alert.timestamp}")
-
-app.main()
+        print(f"Received alert: Total sales {alert.product} - {alert.total_sales} at {alert.timestamp}")
